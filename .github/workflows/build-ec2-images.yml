@@ -1,0 +1,77 @@
+name: Build EC2 Compute Images
+
+on:
+  pull_request:
+    paths:
+      - 'ubuntu/standard/*/Dockerfile'
+      - 'ubuntu/standard/*/**'
+      - 'al/x86_64/standard/*/Dockerfile'
+      - 'al/x86_64/standard/*/**'
+      - 'al/aarch64/standard/*/Dockerfile'
+      - 'al/aarch64/standard/*/**'
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'Comma-separated image paths to build (e.g. ubuntu/standard/8.0,al/x86_64/standard/6.0). Leave empty to build all.'
+        required: false
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.changed.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed images
+        id: changed
+        run: |
+          # Manual override via workflow_dispatch
+          if [ -n "${{ inputs.images }}" ]; then
+            JSON=$(echo "${{ inputs.images }}" | tr ',' '\n' | jq -R . | jq -sc .)
+            echo "images=$JSON" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Build all when triggered manually without specifying images
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            JSON=$(find ubuntu/standard al/x86_64/standard al/aarch64/standard -name Dockerfile -printf '%h\n' 2>/dev/null | sort | jq -R . | jq -sc .)
+            echo "images=$JSON" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Auto-detect from PR diff
+          IMAGES=()
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+
+          for dir in $(find ubuntu/standard al/x86_64/standard al/aarch64/standard -name Dockerfile -printf '%h\n' 2>/dev/null | sort); do
+            if echo "$CHANGED_FILES" | grep -q "^${dir}/"; then
+              IMAGES+=("$dir")
+            fi
+          done
+
+          if [ ${#IMAGES[@]} -eq 0 ]; then
+            echo "images=[]" >> "$GITHUB_OUTPUT"
+          else
+            JSON=$(printf '%s\n' "${IMAGES[@]}" | jq -R . | jq -sc .)
+            echo "images=$JSON" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summary
+        run: echo "Changed images - ${{ steps.changed.outputs.images }}"
+
+  build:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.images != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.detect-changes.outputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.image }}
+        run: docker build -t codebuild-test/${{ matrix.image }} ${{ matrix.image }}
