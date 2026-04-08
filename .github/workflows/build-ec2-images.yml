@@ -65,7 +65,10 @@ jobs:
   build:
     needs: detect-changes
     if: needs.detect-changes.outputs.images != '[]'
-    runs-on: ${{ contains(matrix.image, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on:
+      - codebuild-aws-docker-images-x86-${{ github.run_id }}-${{ github.run_attempt }}
+        image:${{ contains(matrix.image, 'aarch64') && 'arm-3.0' || 'linux-5.0' }}
+        instance-size:xlarge
     strategy:
       fail-fast: false
       matrix:
