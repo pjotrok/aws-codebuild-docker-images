@@ -68,7 +68,7 @@ jobs:
     runs-on:
       - codebuild-aws-docker-images-x86-${{ github.run_id }}-${{ github.run_attempt }}
         image:${{ contains(matrix.image, 'aarch64') && 'arm-3.0' || 'linux-5.0' }}
-        instance-size:xlarge
+        instance-size:large
     strategy:
       fail-fast: false
       matrix:
