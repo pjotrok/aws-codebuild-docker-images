@@ -1,6 +1,14 @@
 name: Build EC2 Compute Images
 
 on:
+  push:
+    paths:
+      - 'ubuntu/standard/*/Dockerfile'
+      - 'ubuntu/standard/*/**'
+      - 'al/x86_64/standard/*/Dockerfile'
+      - 'al/x86_64/standard/*/**'
+      - 'al/aarch64/standard/*/Dockerfile'
+      - 'al/aarch64/standard/*/**'
   pull_request:
     paths:
       - 'ubuntu/standard/*/Dockerfile'
@@ -42,9 +50,13 @@ jobs:
             exit 0
           fi
 
-          # Auto-detect from PR diff
+          # Auto-detect from diff
           IMAGES=()
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          fi
 
           for dir in $(find ubuntu/standard al/x86_64/standard al/aarch64/standard -name Dockerfile -printf '%h\n' 2>/dev/null | sort); do
             if echo "$CHANGED_FILES" | grep -q "^${dir}/"; then
