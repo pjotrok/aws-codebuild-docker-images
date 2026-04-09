@@ -36,6 +36,14 @@ jobs:
       - name: Detect changed images
         id: changed
         run: |
+          # Unmaintained images to exclude from builds
+          UNMAINTAINED="ubuntu/standard/5.0 ubuntu/standard/6.0 al/x86_64/standard/4.0 al/x86_64/standard/corretto8 al/x86_64/standard/corretto11 al/aarch64/standard/2.0"
+
+          is_maintained() {
+            for skip in $UNMAINTAINED; do [ "$1" = "$skip" ] && return 1; done
+            return 0
+          }
+
           # Manual override via workflow_dispatch
           if [ -n "${{ inputs.images }}" ]; then
             JSON=$(echo "${{ inputs.images }}" | tr ',' '\n' | jq -R . | jq -sc .)
@@ -43,9 +51,9 @@ jobs:
             exit 0
           fi
 
-          # Build all when triggered manually without specifying images
+          # Build all maintained when triggered manually without specifying images
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            JSON=$(find ubuntu/standard al/x86_64/standard al/aarch64/standard -name Dockerfile -printf '%h\n' 2>/dev/null | sort | jq -R . | jq -sc .)
+            JSON=$(find ubuntu/standard al/x86_64/standard al/aarch64/standard -name Dockerfile -printf '%h\n' 2>/dev/null | sort | while read dir; do is_maintained "$dir" && echo "$dir"; done | jq -R . | jq -sc .)
             echo "images=$JSON" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -59,6 +67,7 @@ jobs:
           fi
 
           for dir in $(find ubuntu/standard al/x86_64/standard al/aarch64/standard -name Dockerfile -printf '%h\n' 2>/dev/null | sort); do
+            is_maintained "$dir" || continue
             if echo "$CHANGED_FILES" | grep -q "^${dir}/"; then
               IMAGES+=("$dir")
             fi
